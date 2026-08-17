@@ -2,10 +2,10 @@
 
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Search, Download, FileSpreadsheet, ExternalLink, RefreshCw, Star, ShoppingBag } from 'lucide-react';
+import { Search, Download, FileSpreadsheet, ExternalLink, RefreshCw, Star, ShoppingBag, AlertCircle } from 'lucide-react';
 import { ProductItem, ScrapeResponse, TimeRange, Platform } from '@/types/market';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export default function DashboardPage() {
   const [keyword, setKeyword] = useState('');
@@ -22,15 +22,40 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.post<ScrapeResponse>(`${API_BASE_URL}/api/scrape`, {
-        keyword,
-        time_range: timeRange,
-        platform,
-        limit: 10
-      });
-      setResult(response.data);
+      const endpoint = API_BASE_URL ? `${API_BASE_URL}/api/scrape` : '/api/scrape';
+      console.log('Requesting scrape:', endpoint, { keyword, time_range: timeRange, platform });
+      
+      const response = await axios.post<ScrapeResponse>(
+        endpoint,
+        {
+          keyword: keyword.trim(),
+          time_range: timeRange,
+          platform: platform,
+          limit: 10
+        },
+        {
+          timeout: 25000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      console.log('Scrape response received:', response.data);
+      if (response.data && response.data.data) {
+        setResult(response.data);
+      } else {
+        setError('Data diterima tapi format tidak sesuai.');
+      }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Gagal mengambil data dari server');
+      console.error('Scrape error:', err);
+      if (err.response) {
+        setError(`Error Server (${err.response.status}): ${err.response.data?.detail || err.message}`);
+      } else if (err.request) {
+        setError('Tidak ada response dari backend API. Pastikan backend di port 8000 sedang aktif.');
+      } else {
+        setError(`Terjadi kesalahan: ${err.message}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -38,12 +63,14 @@ export default function DashboardPage() {
 
   const handleExportExcel = () => {
     if (!keyword) return;
-    window.open(`${API_BASE_URL}/api/export/excel?keyword=${encodeURIComponent(keyword)}&time_range=${timeRange}&platform=${platform}`, '_blank');
+    const base = API_BASE_URL || '';
+    window.open(`${base}/api/export/excel?keyword=${encodeURIComponent(keyword)}&time_range=${timeRange}&platform=${platform}`, '_blank');
   };
 
   const handleExportPDF = () => {
     if (!keyword) return;
-    window.open(`${API_BASE_URL}/api/export/pdf?keyword=${encodeURIComponent(keyword)}&time_range=${timeRange}&platform=${platform}`, '_blank');
+    const base = API_BASE_URL || '';
+    window.open(`${base}/api/export/pdf?keyword=${encodeURIComponent(keyword)}&time_range=${timeRange}&platform=${platform}`, '_blank');
   };
 
   return (
@@ -62,7 +89,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800">
-              API Status: Ready
+              ● API Ready
             </span>
           </div>
         </header>
@@ -77,7 +104,7 @@ export default function DashboardPage() {
                   type="text"
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
-                  placeholder="Contoh: minyak goreng, skincare, sepatu running..."
+                  placeholder="Contoh: minyak goreng, sabun, skincare..."
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 pl-10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   required
                 />
@@ -139,13 +166,30 @@ export default function DashboardPage() {
 
         {/* Error Alert */}
         {error && (
-          <div className="bg-rose-950/60 border border-rose-800 text-rose-300 p-4 rounded-lg text-sm">
-            {error}
+          <div className="bg-rose-950/60 border border-rose-800 text-rose-300 p-4 rounded-xl text-sm flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-400" />
+            <div>{error}</div>
+          </div>
+        )}
+
+        {/* Loading Skeleton */}
+        {loading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-pulse">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className="bg-slate-900/60 border border-slate-800 p-5 rounded-xl h-44 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="h-4 bg-slate-800 rounded w-1/4"></div>
+                  <div className="h-4 bg-slate-800 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-800 rounded w-1/2"></div>
+                </div>
+                <div className="h-4 bg-slate-800 rounded w-full"></div>
+              </div>
+            ))}
           </div>
         )}
 
         {/* Results Area */}
-        {result && (
+        {result && !loading && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl">
               <div>
